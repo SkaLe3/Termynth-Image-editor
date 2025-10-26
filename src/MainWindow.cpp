@@ -20,152 +20,11 @@
 
 #include "ui/ui_MainWindow.h"
 #include "CanvasView.h"
+#include "CellItem.h"
 
-// Custom QGraphicsView to handle mouse events
-// class CanvasView : public QGraphicsView
-// {
-// public:
-// 	CanvasView(QGraphicsScene* scene, MainWindow* parent)
-// 		: QGraphicsView(scene, parent), m_MainWindow(parent) 
-// 	{
-// 	}
-// 
-// protected:
-// 	void mousePressEvent(QMouseEvent* event) override
-// 	{
-// 		QGraphicsView::mousePressEvent(event);
-// 		HandleMouseEvent(event, false);
-// 	}
-// 
-// 	void mouseMoveEvent(QMouseEvent* event) override
-// 	{
-// 		QGraphicsView::mouseMoveEvent(event);
-// 		if (event->buttons() & Qt::LeftButton)
-// 		{
-// 			HandleMouseEvent(event, false);
-// 		}
-// 	}
-// 
-// private:
-// 	void HandleMouseEvent(QMouseEvent* event, bool drag)
-// 	{
-// 		QPointF scenePos = mapToScene(event->pos());
-// 		QGraphicsItem* item = scene()->itemAt(scenePos, transform());
-// 		if (CellItem* cell = dynamic_cast<CellItem*>(item))
-// 		{
-// 			int32_t x = static_cast<int32_t>(cell->x() / 40);
-// 			int32_t y = static_cast<int32_t>(cell->y() / 40);
-// 			bool bShift = event->modifiers() & Qt::ShiftModifier;
-// 			if (drag)
-// 			{
-// 				m_MainWindow->OnCanvasDragged(x, y, bShift);
-// 			}
-// 			else
-// 			{
-// 				m_MainWindow->OnCanvasClicked(x, y, bShift);
-// 			}
-// 		}
-// 	}
-// 
-// private:
-// 	MainWindow* m_MainWindow;
-// };
+#include <cstdint>
 
-CellItem::CellItem(int32_t x, int32_t y, qreal size, QGraphicsItem* parent)
-	: QGraphicsRectItem(x* size, y* size, size, size, parent)
-	, m_GridX(x), m_GridY(y), m_Size(size)
-{
-	setAcceptHoverEvents(true);
-	setPen(QPen(Qt::gray, 1));
-}
 
-void CellItem::UpdateCell(const CellData& data)
-{
-	m_Data = data;
-	update();
-}
-
-void CellItem::paint(QPainter* painter, const QStyleOptionGraphicsItem* option, QWidget* widget)
-{
-	Q_UNUSED(option);
-	Q_UNUSED(widget);
-
-	painter->fillRect(rect(), m_Data.BgColor);
-
-	painter->setPen(QPen(Qt::gray, 1));
-	painter->drawRect(rect());
-
-	QFont font("Courier New", 16);
-	font.setBold(m_Data.Bold);
-	font.setItalic(m_Data.Italic);
-	font.setUnderline(m_Data.Underline);
-	painter->setFont(font);
-	painter->setPen(m_Data.FgColor);
-
-	QRectF textRect = rect();
-	painter->drawText(textRect, Qt::AlignCenter, QString(m_Data.Character));
-
-	qreal iconSize = 8;
-	qreal margin = 2;
-	int32_t attrCount = 0;
-
-	if (m_Data.Bold)
-	{
-		painter->fillRect(QRectF(rect().right() - iconSize - margin,
-			rect().top() + margin + attrCount * (iconSize + 1),
-			iconSize, iconSize), Qt::red);
-		attrCount++;
-	}
-	if (m_Data.Dim)
-	{
-		painter->fillRect(QRectF(rect().right() - iconSize - margin,
-			rect().top() + margin + attrCount * (iconSize + 1),
-			iconSize, iconSize), Qt::magenta);
-		attrCount++;
-	}
-	if (m_Data.Italic)
-	{
-		painter->fillRect(QRectF(rect().right() - iconSize - margin,
-			rect().top() + margin + attrCount * (iconSize + 1),
-			iconSize, iconSize), Qt::blue);
-		attrCount++;
-	}
-	if (m_Data.Underline)
-	{
-		painter->fillRect(QRect(rect().right() - iconSize - margin,
-			rect().top() + margin + attrCount * (iconSize + 1),
-			iconSize, iconSize), Qt::green);
-		attrCount++;
-	}
-	if (m_Data.Blink)
-	{
-		painter->fillRect(QRect(rect().right() - iconSize - margin,
-			rect().top() + margin + attrCount * (iconSize + 1),
-			iconSize, iconSize), Qt::cyan);
-		attrCount++;
-	}
-	if (m_Data.Inverse)
-	{
-		painter->fillRect(QRect(rect().right() - iconSize - margin,
-			rect().top() + margin + attrCount * (iconSize + 1),
-			iconSize, iconSize), Qt::darkRed);
-		attrCount++;
-	}
-	if (m_Data.DefaultFg)
-	{
-		painter->fillRect(QRect(rect().right() - iconSize - margin,
-			rect().top() + margin + attrCount * (iconSize + 1),
-			iconSize, iconSize), Qt::darkGreen);
-		attrCount++;
-	}
-	if (m_Data.DefaultBg)
-	{
-		painter->fillRect(QRect(rect().right() - iconSize - margin,
-			rect().top() + margin + attrCount * (iconSize + 1),
-			iconSize, iconSize), Qt::darkCyan);
-		attrCount++;
-	}
-}
 
 
 MainWindow::MainWindow(QWidget* parent)
@@ -254,14 +113,20 @@ void MainWindow::SetupUI()
 
 
 	m_Scene = new QGraphicsScene(this);
-	//m_Scene->setSceneRect(0, 0, 800, 600);
-	m_Scene->setBackgroundBrush(Qt::lightGray);
+	m_Scene->setSceneRect(0, 0, 6000, 6000);
+	m_CanvasOriginX = 3000;
+	m_CanvasOriginY = 3000;
+	//m_Scene->setBackgroundBrush(Qt::lightGray);
 	//m_Scene->setBackgroundBrush(QBrush(Qt::white));
+
+
 
 	m_View = new CanvasView(this);
 	m_View->setScene(m_Scene);
 
 	mainLayout->addWidget(m_View, 1);
+	
+	SelectTool(Tool::Fill);
 }
 
 void MainWindow::SetupMenuBar()
@@ -325,8 +190,16 @@ void MainWindow::CreateCanvas(int32_t width, int32_t height)
 	m_Cells.clear();
 	m_Width = width;
 	m_Height = height;
-
 	qreal cellSize = 40;
+
+	m_CanvasOriginX = m_CanvasOriginX - (width * cellSize / 2);
+	m_CanvasOriginY = m_CanvasOriginY - (height * cellSize / 2);
+
+	QGraphicsRectItem* canvasBase = new QGraphicsRectItem(0, 0, width * cellSize, height * cellSize);
+	canvasBase->setZValue(0);
+	canvasBase->setPos(m_CanvasOriginX, m_CanvasOriginY);
+	m_Scene->addItem(canvasBase);
+
 	m_Cells.resize(height);
 
 	for (int y = 0; y < height; ++y)
@@ -334,8 +207,8 @@ void MainWindow::CreateCanvas(int32_t width, int32_t height)
 		m_Cells[y].resize(width);
 		for (int x = 0; x < width; ++x)
 		{
-			CellItem* cell = new CellItem(x, y, cellSize);
-			m_Scene->addItem(cell);
+			CellItem* cell = new CellItem(x, y, cellSize, canvasBase);
+			cell->setZValue(1);
 			m_Cells[y][x] = cell;
 
 			CellData data;
@@ -343,7 +216,6 @@ void MainWindow::CreateCanvas(int32_t width, int32_t height)
 		}
 	}
 
-	m_Scene->setSceneRect(0, 0, width * cellSize, height * cellSize);
 	m_StatusLabel->setText(QString("Canvas: %1x%2").arg(width).arg(height));
 }
 
