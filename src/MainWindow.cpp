@@ -17,10 +17,13 @@
 #include <QMouseEvent>
 #include <QGraphicsSceneMouseEvent>
 #include <QStatusBar>
+#include <QButtonGroup>
+
 
 #include "ui/ui_MainWindow.h"
 #include "CanvasView.h"
 #include "CellItem.h"
+#include "ColorSwatch.h"
 
 #include <cstdint>
 
@@ -30,8 +33,8 @@
 MainWindow::MainWindow(QWidget* parent)
 	: QMainWindow(parent)
 	, m_Width(0), m_Height(0)
-	, m_CurrentTool(Tool::Fill)
-	, m_CurrentChar('█')
+	, m_CurrentTool(Tool::Brush)
+	, m_CurrentChar('G')
 	, m_CurrentFgColor(Qt::white)
 	, m_CurrentBgColor(Qt::black)
 	, m_CurrentAttribute(Attribute::Bold)
@@ -49,56 +52,17 @@ MainWindow::MainWindow(QWidget* parent)
 
 }
 
-MainWindow::~MainWindow() 
+MainWindow::~MainWindow()
 {
 	delete m_Ui;
 }
 
 void MainWindow::SetupUI()
 {
-	QWidget* central = new QWidget(this);
-	//QHBoxLayout* mainLayout = new QHBoxLayout(central);
-
-
-	// Tool panel
-	m_ToolPanel = new QWidget();
-	QVBoxLayout* toolLayout = new QVBoxLayout(m_ToolPanel);
-	m_ToolPanel->setMaximumWidth(300);
-
-	// Tools group
-	QGroupBox* toolsGroup = new QGroupBox("Tools");
-	QVBoxLayout* toolsLayout = new QVBoxLayout(toolsGroup);
-
-	QPushButton* fillBtn = new QPushButton("Fill Tool (F)");
-	QPushButton* selectBtn = new QPushButton("Select Tool (S)");
-	QPushButton* fgBtn = new QPushButton("FG Color Tool (G)");
-	QPushButton* bgBtn = new QPushButton("BG Color Tool (B)");
-	QPushButton* attrBtn = new QPushButton("Attribute Tool (A)");
-
-	connect(fillBtn, &QPushButton::clicked, [this]() { SelectTool(Tool::Fill); });
-	connect(selectBtn, &QPushButton::clicked, [this]() { SelectTool(Tool::Select); });
-	connect(fgBtn, &QPushButton::clicked, [this]() { SelectTool(Tool::FgColor); });
-	connect(bgBtn, &QPushButton::clicked, [this]() { SelectTool(Tool::BgColor); });
-	connect(attrBtn, &QPushButton::clicked, [this]() { SelectTool(Tool::Attribute); });
-
-	toolsLayout->addWidget(fillBtn);
-	toolsLayout->addWidget(selectBtn);
-	toolsLayout->addWidget(fgBtn);
-	toolsLayout->addWidget(bgBtn);
-	toolsLayout->addWidget(attrBtn);
-	toolLayout->addWidget(toolsGroup);
-	 
 	// Cell info
 	m_SelectedCellInfo = new QLabel("No cell selected");
 	m_SelectedCellInfo->setWordWrap(true);
-	toolLayout->addWidget(m_SelectedCellInfo);
-
-	toolLayout->addStretch();
-	//mainLayout->addWidget(m_ToolPanel);
-
-
-
-	setCentralWidget(central);
+	//toolLayout->addWidget(m_SelectedCellInfo);
 
 	m_Ui->setupUi(this);
 
@@ -125,8 +89,92 @@ void MainWindow::SetupUI()
 	m_View->setScene(m_Scene);
 
 	mainLayout->addWidget(m_View, 1);
-	
-	SelectTool(Tool::Fill);
+
+	// Tools	
+	m_ToolPanel = m_Ui->ToolbarWidget;
+	QVBoxLayout* toolLayout = new QVBoxLayout(m_Ui->ToolbarWidgetContents);
+	m_ToolPanel->setFeatures(QDockWidget::DockWidgetClosable | QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetFloatable);
+	m_ToolPanel->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+
+
+
+
+	QPushButton* selectButton = new QPushButton("Select");
+	QPushButton* brushButton = new QPushButton("Brush");
+	QPushButton* eraserButton = new QPushButton("Eraser");
+	QPushButton* paintButton = new QPushButton("Paint");
+	QPushButton* attrButton = new QPushButton("Attribute");
+
+	selectButton->setCheckable(true);
+	brushButton->setCheckable(true);
+	eraserButton->setCheckable(true);
+	paintButton->setCheckable(true);
+	attrButton->setCheckable(true);
+
+	QButtonGroup* toolGroup = new QButtonGroup(m_Ui->ToolbarWidgetContents);
+	toolGroup->setExclusive(true);
+	toolGroup->addButton(selectButton, 0);
+	toolGroup->addButton(brushButton, 1);
+	toolGroup->addButton(eraserButton, 2);
+	toolGroup->addButton(paintButton, 3);
+	toolGroup->addButton(attrButton, 4);
+
+	connect(selectButton, &QPushButton::clicked, [this]() { SelectTool(Tool::Select); });
+	connect(brushButton, &QPushButton::clicked, [this]() { SelectTool(Tool::Brush); });
+	connect(eraserButton, &QPushButton::clicked, [this]() { SelectTool(Tool::Eraser); });
+	connect(paintButton, &QPushButton::clicked, [this]() { SelectTool(Tool::Paint); });
+	connect(attrButton, &QPushButton::clicked, [this]() { SelectTool(Tool::Attribute); });
+
+	m_ColorSwatch = new ColorSwatch();
+
+	toolLayout->addWidget(selectButton);
+	toolLayout->addWidget(brushButton);
+	toolLayout->addWidget(eraserButton);
+	toolLayout->addWidget(paintButton);
+	toolLayout->addWidget(attrButton);
+	toolLayout->addWidget(m_ColorSwatch);
+	toolLayout->addStretch();
+
+
+
+	QObject::connect(m_ColorSwatch, &ColorSwatch::ColorChanged, [](const QColor& color) {
+		qDebug() << "Color changed to" << color;
+		});
+
+	m_Ui->ToolbarWidgetContents->setLayout(toolLayout);
+
+	QSize contentHint = m_Ui->ToolbarWidgetContents->sizeHint();
+
+	m_ToolPanel->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Expanding);
+	m_ToolPanel->setMinimumWidth(contentHint.width());
+	m_ToolPanel->setMaximumWidth(contentHint.width());
+
+	QObject::connect(m_ToolPanel, &QDockWidget::topLevelChanged, [this](bool floating)
+		{
+			QWidget* content = m_ToolPanel->widget();
+			QSize hint = content->sizeHint();
+
+			if (floating)
+			{
+				m_ToolPanel->setMinimumSize(hint);
+				m_ToolPanel->setMaximumSize(hint);
+				m_ToolPanel->resize(hint);
+				m_ToolPanel->setWindowFlags(Qt::Dialog | Qt::MSWindowsFixedSizeDialogHint);
+				m_ToolPanel->show();
+			}
+			else
+			{
+				m_ToolPanel->setWindowFlags(Qt::Widget);
+				m_ToolPanel->setMinimumHeight(0);
+				m_ToolPanel->setMaximumHeight(QWIDGETSIZE_MAX);
+				m_ToolPanel->setMinimumWidth(hint.width());
+				m_ToolPanel->setMaximumWidth(hint.width());
+				m_ToolPanel->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Expanding);
+				m_ToolPanel->show();
+			}
+		});
+
+	SelectTool(Tool::Brush);
 }
 
 void MainWindow::SetupMenuBar()
@@ -238,22 +286,27 @@ void MainWindow::ApplyCurrentTool(int32_t x, int32_t y, bool shiftPressed)
 	CellData data = m_Cells[y][x]->GetData();
 
 	switch (m_CurrentTool) {
-	case Tool::Fill:
+	case Tool::Brush:
 		data.Character = m_CurrentChar;
 		break;
-
+	case Tool::Eraser:
+		data.Character = ' ';
+		break;
 	case Tool::Select:
 		ShowCellProperties(x, y);
 		m_SelectedX = x;
 		m_SelectedY = y;
 		return;
 
-	case Tool::FgColor:
-		data.FgColor = m_CurrentFgColor;
-		break;
-
-	case Tool::BgColor:
-		data.BgColor = m_CurrentBgColor;
+	case Tool::Paint:
+		if (shiftPressed)
+		{
+			data.BgColor = m_ColorSwatch->Color();
+		}
+		else
+		{
+			data.FgColor = m_ColorSwatch->Color();
+		}
 		break;
 
 	case Tool::Attribute:
@@ -290,7 +343,7 @@ void MainWindow::ApplyCurrentTool(int32_t x, int32_t y, bool shiftPressed)
 	m_bIsModified = true;
 }
 
-void MainWindow::ShowCellProperties(int32_t x, int32_t y) 
+void MainWindow::ShowCellProperties(int32_t x, int32_t y)
 {
 	CellData data = m_Cells[y][x]->GetData();
 	QString info = QString("Cell [%1, %2]\n").arg(x).arg(y);
@@ -314,33 +367,33 @@ void MainWindow::ShowCellProperties(int32_t x, int32_t y)
 	m_SelectedCellInfo->setText(info);
 }
 
-void MainWindow::SelectTool(Tool tool) 
+void MainWindow::SelectTool(Tool tool)
 {
 	m_CurrentTool = tool;
 	QString toolName;
-	switch (tool) 
+	switch (tool)
 	{
-	case Tool::Fill: toolName = "Fill"; break;
+	case Tool::Brush: toolName = "Brush"; break;
+	case Tool::Eraser: toolName = "Eraser"; break;
 	case Tool::Select: toolName = "Select"; break;
-	case Tool::FgColor: toolName = "FG Color"; break;
-	case Tool::BgColor: toolName = "BG Color"; break;
+	case Tool::Paint: toolName = "Paint"; break;
 	case Tool::Attribute: toolName = "Attribute"; break;
 	}
 	m_StatusLabel->setText("Current tool: " + toolName);
 }
 
-void MainWindow::SelectCharacter(const QString& ch) 
+void MainWindow::SelectCharacter(const QString& ch)
 {
-	if (!ch.isEmpty()) 
+	if (!ch.isEmpty())
 	{
 		m_CurrentChar = ch[0];
 	}
 }
 
-void MainWindow::SelectFgColor() 
+void MainWindow::SelectFgColor()
 {
 	QColor color = QColorDialog::getColor(m_CurrentFgColor, this, "Select Foreground Color");
-	if (color.isValid()) 
+	if (color.isValid())
 	{
 		m_CurrentFgColor = color;
 		m_FgColorBtn->setStyleSheet(QString("background-color: %1; color: %2;")
@@ -349,10 +402,10 @@ void MainWindow::SelectFgColor()
 	}
 }
 
-void MainWindow::SelectBgColor() 
+void MainWindow::SelectBgColor()
 {
 	QColor color = QColorDialog::getColor(m_CurrentBgColor, this, "Select Background Color");
-	if (color.isValid()) 
+	if (color.isValid())
 	{
 		m_CurrentBgColor = color;
 		m_BgColorBtn->setStyleSheet(QString("background-color: %1; color: %2;")
@@ -362,11 +415,11 @@ void MainWindow::SelectBgColor()
 }
 
 
-void MainWindow::SelectAttribute(Attribute attr) 
+void MainWindow::SelectAttribute(Attribute attr)
 {
 	m_CurrentAttribute = attr;
 	QString attrName;
-	switch (attr) 
+	switch (attr)
 	{
 	case Attribute::Bold: attrName = "Bold"; break;
 	case Attribute::Dim: attrName = "Dim"; break;
@@ -380,25 +433,25 @@ void MainWindow::SelectAttribute(Attribute attr)
 	m_StatusLabel->setText("Attribute: " + attrName + " (Hold Shift to remove)");
 }
 
-void MainWindow::SaveFile() 
+void MainWindow::SaveFile()
 {
-	if (m_CurrentFilePath.isEmpty()) 
+	if (m_CurrentFilePath.isEmpty())
 	{
 		SaveFileAs();
 	}
-	else 
+	else
 	{
 		SaveToFile(m_CurrentFilePath);
 	}
 }
 
-void MainWindow::SaveFileAs() 
+void MainWindow::SaveFileAs()
 {
 	QString filename = QFileDialog::getSaveFileName(this, "Save Texture",
 		"", "Texture Files (*.ctx)");
-	if (!filename.isEmpty()) 
+	if (!filename.isEmpty())
 	{
-		if (SaveToFile(filename)) 
+		if (SaveToFile(filename))
 		{
 			m_CurrentFilePath = filename;
 			setWindowTitle("Console Texture Editor - " + QFileInfo(filename).fileName());
@@ -406,13 +459,13 @@ void MainWindow::SaveFileAs()
 	}
 }
 
-void MainWindow::OpenFile() 
+void MainWindow::OpenFile()
 {
 	QString filename = QFileDialog::getOpenFileName(this, "Open Texture",
 		"", "Texture Files (*.ctx)");
-	if (!filename.isEmpty()) 
+	if (!filename.isEmpty())
 	{
-		if (LoadFromFile(filename)) 
+		if (LoadFromFile(filename))
 		{
 			m_CurrentFilePath = filename;
 			setWindowTitle("Console Texture Editor - " + QFileInfo(filename).fileName());
@@ -420,7 +473,7 @@ void MainWindow::OpenFile()
 	}
 }
 
-bool MainWindow::SaveToFile(const QString& filename) 
+bool MainWindow::SaveToFile(const QString& filename)
 {
 	QFile file(filename);
 	if (!file.open(QIODevice::WriteOnly)) {
@@ -447,7 +500,7 @@ bool MainWindow::SaveToFile(const QString& filename)
 	return true;
 }
 
-bool MainWindow::LoadFromFile(const QString& filename) 
+bool MainWindow::LoadFromFile(const QString& filename)
 {
 	QFile file(filename);
 	if (!file.open(QIODevice::ReadOnly)) {

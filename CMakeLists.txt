@@ -16,10 +16,11 @@ endif()
 find_package(Qt6 COMPONENTS Core Gui Widgets REQUIRED)
 
 # Source files
-file(GLOB_RECURSE SRC_FILES src/*.cpp src/*.h src/*.ui)
+file(GLOB_RECURSE CPP_FILES src/*.cpp src/*.h)
+file(GLOB_RECURSE UI_FILES src/*.ui)
 
 # Create executable
-add_executable(TermynthImageEditor ${SRC_FILES})
+add_executable(TermynthImageEditor ${CPP_FILES} ${UI_FILES})
 
 # Link Qt libraries
 target_link_libraries(TermynthImageEditor PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets)

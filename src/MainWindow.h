@@ -9,6 +9,7 @@
 #include <QComboBox>
 #include <QSpinBox>
 #include <QLabel>
+#include <QDockWidget>
 
 
 #include <cstdint>
@@ -19,13 +20,14 @@ QT_END_NAMESPACE
 
 class CanvasView;
 class CellItem;
+class ColorSwatch;
 
 enum class Tool
 {
-	Fill,
+	Brush,
+	Eraser,
 	Select,
-	FgColor,
-	BgColor,
+	Paint,
 	Attribute
 };
 
@@ -78,8 +80,9 @@ private:
 	// UI Components
 	QGraphicsScene* m_Scene;
 	QGraphicsView* m_View;
-	QWidget* m_ToolPanel;
+	QDockWidget* m_ToolPanel;
 	QComboBox* m_CharSelector;
+	ColorSwatch* m_ColorSwatch;
 	QPushButton* m_FgColorBtn;
 	QPushButton* m_BgColorBtn;
 	QVector<QPushButton*> m_AttrButtons;
