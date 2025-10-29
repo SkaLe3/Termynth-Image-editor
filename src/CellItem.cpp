@@ -3,7 +3,7 @@
 #include <QPainter>
 
 CellItem::CellItem(int32_t x, int32_t y, qreal size, QGraphicsItem* parent)
-	: QGraphicsRectItem(x* size, y* size, size, size, parent)
+	: QGraphicsRectItem(x* size * 0.5f, y* size, size * 0.5f, size, parent)
 	, m_GridX(x), m_GridY(y), m_Size(size)
 {
 	setAcceptHoverEvents(true);
@@ -27,7 +27,7 @@ void CellItem::paint(QPainter* painter, const QStyleOptionGraphicsItem* option, 
 	painter->setPen(QPen(Qt::gray, 1));
 	painter->drawRect(rect());
 
-	QFont font("Courier New", 16);
+	QFont font("Courier New", 20);
 	font.setBold(m_Data.Bold);
 	font.setItalic(m_Data.Italic);
 	font.setUnderline(m_Data.Underline);
@@ -97,4 +97,49 @@ void CellItem::paint(QPainter* painter, const QStyleOptionGraphicsItem* option, 
 			iconSize, iconSize), Qt::darkCyan);
 		attrCount++;
 	}
+}
+
+void CellData::Serialize(QDataStream& out)
+{
+	quint8 attributes = 0;
+	attributes = (Bold) | (Dim << 1) | (Italic << 2) | (Underline << 3) |
+		(Blink << 4) | (Inverse << 5) | (0 << 6) | (0 << 7);
+
+	bool outTransparent = true;
+	if (BgColor.alpha() < 128)
+		outTransparent = false;
+
+	out << static_cast<quint16>(Character.unicode());
+	out << quint8(outTransparent);
+	out << attributes;
+	out << static_cast<quint8>(FgColor.red()) << static_cast<quint8>(FgColor.green()) << static_cast<quint8>(FgColor.blue());
+	out << static_cast<quint8>(BgColor.red()) << static_cast<quint8>(BgColor.green()) << static_cast<quint8>(BgColor.blue());
+}
+
+void CellData::Deserialize(QDataStream& in)
+{
+	quint8 attributes = 0;
+	quint16 charCode = 0;
+	quint8 fgR, fgG, fgB;
+	quint8 bgR, bgG, bgB;
+	bool transparent;
+
+	in >> charCode;
+	in >> transparent;
+	in >> attributes;
+	in >> fgR >> fgG >> fgB;
+	in >> bgR >> bgG >> bgB;
+
+	Character = QChar(static_cast<char16_t>(charCode));
+	FgColor = QColor(fgR, fgG, fgB, 255);
+	BgColor = QColor(bgR, bgG, bgB, 255);
+	Bold = attributes & (1 << 0);
+	Dim = attributes & (1 << 1);
+	Italic = attributes & (1 << 2);
+	Underline = attributes & (1 << 3);
+	Blink = attributes & (1 << 4);
+	Inverse = attributes & (1 << 5);
+	DefaultFg = attributes & (1 << 6);
+	DefaultBg = attributes & (1 << 7);
+
 }

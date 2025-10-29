@@ -11,6 +11,7 @@
 #include <QLabel>
 #include <QDockWidget>
 
+#include "Tool.h"
 
 #include <cstdint>
 
@@ -21,15 +22,10 @@ QT_END_NAMESPACE
 class CanvasView;
 class CellItem;
 class ColorSwatch;
+class ToolPanelDock;
+class ToolPropertiesPanelDock;
 
-enum class Tool
-{
-	Brush,
-	Eraser,
-	Select,
-	Paint,
-	Attribute
-};
+
 
 enum class Attribute
 {
@@ -58,7 +54,7 @@ public slots:
 	void SaveFileAs();
 	void OnCanvasClicked(int32_t x, int32_t y, bool shiftPressed);
 	void OnCanvasDragged(int32_t x, int32_t y, bool shiftPressed);
-	void SelectTool(Tool tool);
+	void SelectTool(ETool tool);
 	void SelectCharacter(const QString& ch);
 	void SelectFgColor();
 	void SelectBgColor();
@@ -74,15 +70,16 @@ private:
 	bool LoadFromFile(const QString& filename);
 	bool SaveToFile(const QString& filename);
 
-private:
-	Ui::MainWindow* m_Ui;
+	void SetupTheme();
 
+private:
 	// UI Components
 	QGraphicsScene* m_Scene;
-	QGraphicsView* m_View;
-	QDockWidget* m_ToolPanel;
+	CanvasView* m_View;
+	ToolPanelDock* m_ToolPanel;
+	ToolPropertiesPanelDock* m_ToolPropertiesPanel;
+
 	QComboBox* m_CharSelector;
-	ColorSwatch* m_ColorSwatch;
 	QPushButton* m_FgColorBtn;
 	QPushButton* m_BgColorBtn;
 	QVector<QPushButton*> m_AttrButtons;
@@ -97,7 +94,7 @@ private:
 	int32_t m_CanvasOriginY;
 
 	// Current tool state
-	Tool m_CurrentTool;
+	ETool m_CurrentTool;
 	QChar m_CurrentChar;
 	QColor m_CurrentFgColor;
 	QColor m_CurrentBgColor;

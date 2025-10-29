@@ -14,6 +14,9 @@ struct CellData
 	bool Inverse = false;
 	bool DefaultFg = true;
 	bool DefaultBg = true;
+
+	void Serialize(QDataStream& out);
+	void Deserialize(QDataStream& in);
 };
 
 
