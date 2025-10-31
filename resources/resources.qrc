@@ -1,5 +1,9 @@
 <RCC>
     <qresource prefix="/icons">
         <file>close.png</file>
+        <file>dropdown.png</file>
+        <file>minimize.png</file>
+        <file>maximize.png</file>
+        <file>closewindow.png</file>
     </qresource>
 </RCC>

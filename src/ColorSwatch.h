@@ -15,6 +15,7 @@ public:
 	explicit ColorSwatch(QWidget* parent = nullptr);
 
 	QColor Color() { return m_Color; }
+	void SetColor(const QColor& color);
 	
 signals:
 	void ColorChanged(const QColor& color);
@@ -24,6 +25,7 @@ protected:
 	void mousePressEvent(QMouseEvent* event) override;
 
 private:
+	void UpdateColor(const QColor& color);
 	void ChooseColor();
 
 private:

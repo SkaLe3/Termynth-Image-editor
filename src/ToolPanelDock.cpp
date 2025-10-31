@@ -8,8 +8,6 @@
 
 #include "ColorSwatch.h"
 #include "DockTitleBar.h"
-#include "DragStripe.h"
-
 
 
 ToolPanelDock::ToolPanelDock(QWidget* parent /*= nullptr*/)
@@ -27,14 +25,19 @@ QColor ToolPanelDock::GetActiveColor() const
 
 
 
+void ToolPanelDock::SelectColor(const QColor& color)
+{
+	m_ColorSwatch->SetColor(color);
+}
+
 void ToolPanelDock::ActivateTool(ETool tool)
 {
  	QAbstractButton* toolButton = m_ToolGroup->button(static_cast<int32_t>(tool));
 	if (toolButton)
 	{
-		toolButton->setChecked(true);
-		emit m_ToolGroup->buttonClicked(toolButton);
+		toolButton->click();
 	}
+
 }
 
 void ToolPanelDock::SetupUI()
@@ -91,6 +94,7 @@ void ToolPanelDock::SetupUI()
 	m_ToolLayout->addWidget(attrButton);
 	m_ToolLayout->addSpacing(10);
 	m_ToolLayout->addWidget(m_ColorSwatch, 0, Qt::AlignHCenter);
+	m_ToolLayout->addSpacing(4);
 	m_ToolLayout->addStretch();
 
 
@@ -100,12 +104,6 @@ void ToolPanelDock::SetupUI()
 		StyleToolButton(b);
 	}
 
-
-	m_Content->setStyleSheet(R"(
-	#ToolPanelContent  {
-            border: 1px solid #333333;
-        }
-	)");
 }
 
 
@@ -118,18 +116,19 @@ void ToolPanelDock::StyleToolButton(QPushButton* button)
         border: 1px solid transparent;
         border-radius: 4px;
         color: white;
+		padding: 4px;
     }
     QPushButton:hover {
-        background-color: rgba(0, 0, 0, 30);
-		border: 1px solid rgba(255, 255, 255, 50);
+        background-color: #404040;
+		border: 1px solid #636363;
     }
     QPushButton:checked {
-        background-color: rgba(0, 0, 0, 60);
-		border: 1px solid rgba(255, 255, 255, 50);
+        background-color: #333333;
+		border: 1px solid#636363;
     }
     QPushButton:pressed {
-        background-color: rgba(0, 0, 0, 80);
-		border: 1px solid rgba(255, 255, 255, 50);
+        background-color: #333333;
+		border: 1px solid #636363;
     }
     )";
 	button->setStyleSheet(style);

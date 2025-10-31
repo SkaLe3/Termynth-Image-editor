@@ -7,18 +7,20 @@
 
 CanvasView::CanvasView(MainWindow* parent /*= nullptr*/)
 	: QGraphicsView(parent)
-	, m_MainWindow(parent)
-	, m_ScaleFactor(1.0)
+	, m_ScaleFactor(0.8)
 	, m_MinScale(0.2)
 	, m_MaxScale(5.0)
 	, m_SpaceHeld(false)
+	, m_HoveredCell(nullptr)
 {
 	setRenderHint(QPainter::Antialiasing);
 	setDragMode(NoDrag);
 	setTransformationAnchor(AnchorUnderMouse);
 	setResizeAnchor(AnchorUnderMouse);
 	setFrameStyle(QFrame::NoFrame);
+	UpdateZoom();
 }
+
 
 void CanvasView::wheelEvent(QWheelEvent* event)
 {
@@ -52,6 +54,7 @@ void CanvasView::mouseMoveEvent(QMouseEvent* event)
 		event->accept();
 		return;
 	}
+	HandleMouseHoverCell(event);
 	if (event->buttons() & Qt::LeftButton)
 	{
 		HandleMouseEvent(event, true);
@@ -118,6 +121,11 @@ void CanvasView::Zoom(int32_t delta)
 
 	m_ScaleFactor = std::clamp(m_ScaleFactor, m_MinScale, m_MaxScale);
 
+	UpdateZoom();
+}
+
+void CanvasView::UpdateZoom()
+{
 	QTransform transform;
 	transform.scale(m_ScaleFactor, m_ScaleFactor);
 	setTransform(transform);
@@ -126,17 +134,41 @@ void CanvasView::Zoom(int32_t delta)
 void CanvasView::HandleMouseEvent(QMouseEvent* event, bool bDrag)
 {
 	QPointF scenePos = mapToScene(event->pos());
-	QGraphicsItem* item = scene()->itemAt(scenePos, transform());
-	if (CellItem* cell = dynamic_cast<CellItem*>(item))
+	QList<QGraphicsItem*> itemsAtPos = scene()->items(scenePos, Qt::IntersectsItemShape, Qt::DescendingOrder, transform());
+	for (QGraphicsItem* item : itemsAtPos)
 	{
-		bool bShift = event->modifiers() & Qt::ShiftModifier;
-		if (bDrag)
+		if (CellItem* cell = dynamic_cast<CellItem*>(item))
 		{
-			m_MainWindow->OnCanvasDragged(cell->GetGridX(), cell->GetGridY(), bShift);
-		}
-		else
-		{
-			m_MainWindow->OnCanvasClicked(cell->GetGridX(), cell->GetGridY(), bShift);
+			bool bShift = event->modifiers() & Qt::ShiftModifier;
+			if (bDrag)
+			{
+				emit CanvasDragged(cell->GetGridX(), cell->GetGridY(), bShift);
+			}
+			else
+			{
+				emit CanvasClicked(cell->GetGridX(), cell->GetGridY(), bShift);
+			}
+			break;
 		}
 	}
 }
+
+void CanvasView::HandleMouseHoverCell(QMouseEvent* event)
+{
+	QPointF scenePos = mapToScene(event->pos());
+	QGraphicsItem* item = scene()->itemAt(scenePos, transform());
+	if (CellItem* cell = dynamic_cast<CellItem*>(item))
+	{
+		if (cell != m_HoveredCell)
+		{
+			m_HoveredCell = cell;
+			emit HoveredCellChanged(cell->GetGridX(), cell->GetGridY());
+		}
+	}
+	else
+	{
+		m_HoveredCell = nullptr;
+		emit HoveredCellGone();
+	}
+}
+

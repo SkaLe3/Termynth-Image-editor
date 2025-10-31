@@ -18,6 +18,8 @@
 #include <QGraphicsSceneMouseEvent>
 #include <QStatusBar>
 #include <QButtonGroup>
+#include <QTimer>
+#include <QSizeGrip>
 
 
 #include "CanvasView.h"
@@ -25,6 +27,7 @@
 #include "ColorSwatch.h"
 #include "ToolPanelDock.h"
 #include "ToolPropertiesPanelDock.h"
+#include "TitleBarWidget.h"
 
 #include <cstdint>
 
@@ -36,20 +39,19 @@ MainWindow::MainWindow(QWidget* parent)
 	, m_Width(0), m_Height(0)
 	, m_CurrentTool(ETool::Brush)
 	, m_CurrentChar('G')
-	, m_CurrentFgColor(Qt::white)
-	, m_CurrentBgColor(Qt::black)
-	, m_CurrentAttribute(Attribute::Bold)
+	, m_CurrentAttributeSet(0)
 	, m_bIsModified(false)
-	, m_bIsDrawing(false)
-	, m_SelectedX(-1), m_SelectedY(-1)
+	, m_bCurrentTransparency(false)
 {
 	SetupUI();
 	SetupMenuBar();
 
 	setWindowTitle("Termynth Image Editor");
+	setWindowFlags(Qt::FramelessWindowHint | Qt::WindowSystemMenuHint);
+	setAttribute(Qt::WA_TranslucentBackground);
 	resize(1200, 800);
 
-
+	setContentsMargins(1, 1, 1, 1);
 }
 
 MainWindow::~MainWindow()
@@ -59,60 +61,38 @@ MainWindow::~MainWindow()
 
 void MainWindow::SetupUI()
 {
-	// Cell info
-	m_SelectedCellInfo = new QLabel("No cell selected");
-	m_SelectedCellInfo->setWordWrap(true);
-	//toolLayout->addWidget(m_SelectedCellInfo);
+	m_TitleBar = new TitleBarWidget(this);
+	setMenuWidget(m_TitleBar);
 
 	QWidget* centralWidget = new QWidget(this);
+	centralWidget->setObjectName("MainBackground");
+	QVBoxLayout* mainLayout = new QVBoxLayout(centralWidget);
+	mainLayout->setContentsMargins(0, 0, 0,0);
+	mainLayout->setSpacing(0);
 	setCentralWidget(centralWidget);
 
-	// Status bar
-	m_StatusLabel = new QLabel("Ready");
-	statusBar()->addWidget(m_StatusLabel);
 
-	QVBoxLayout* mainLayout = new QVBoxLayout(centralWidget);
-	mainLayout->setContentsMargins(0, 0, 0, 0);
-	mainLayout->setSpacing(0);
-	centralWidget->setLayout(mainLayout);
-
-
+	//Scene setup
 	m_Scene = new QGraphicsScene(this);
-	m_Scene->setSceneRect(0, 0, 6000, 6000);
-	m_CanvasOriginX = 3000;
-	m_CanvasOriginY = 3000;
-	//m_Scene->setBackgroundBrush(Qt::lightGray);
-	//m_Scene->setBackgroundBrush(QBrush(Qt::white));
-
-
-
 	m_View = new CanvasView(this);
 	m_View->setScene(m_Scene);
-
+	m_Scene->setSceneRect(0, 0, 6000, 6000);
 	mainLayout->addWidget(m_View, 1);
 
+	connect(m_TitleBar, &TitleBarWidget::MinimizeRequested, this, &MainWindow::showMinimized);
+	connect(m_TitleBar, &TitleBarWidget::MaximizeRequested, this, [this]() {
+		isMaximized() ? showNormal() : showMaximized();
+		});
+	connect(m_TitleBar, &TitleBarWidget::CloseRequested, this, &MainWindow::close);
 
-	setStyleSheet(R"(
-    QMainWindow::separator {
-        width: 1px;
-        background: #222;
-    }
-    QMainWindow::dockwidget {
-        margin: 0;
-        padding: 0;
-    }
-)");
-
-
+	connect(m_View, &CanvasView::CanvasDragged, this, &MainWindow::OnCanvasDragged);
+	connect(m_View, &CanvasView::CanvasClicked, this, &MainWindow::OnCanvasClicked);
+	
 	// Tools	
 	m_ToolPanel = new ToolPanelDock(this);
 	addDockWidget(Qt::LeftDockWidgetArea, m_ToolPanel);
 
-
-	QObject::connect(m_ToolPanel, &ToolPanelDock::ToolSelected, this, [this](ETool tool)
-		{
-			SelectTool(tool);
-		});
+	QObject::connect(m_ToolPanel, &ToolPanelDock::ToolSelected, this, &MainWindow::OnToolSelected);
 
 	QObject::connect(m_ToolPanel, &ToolPanelDock::ColorChanged, this, [](const QColor& color) {
 		qDebug() << "Color changed to" << color;
@@ -120,15 +100,30 @@ void MainWindow::SetupUI()
 
 	m_ToolPropertiesPanel = new ToolPropertiesPanelDock(this);
 	addDockWidget(Qt::TopDockWidgetArea, m_ToolPropertiesPanel);
-	QObject::connect(m_ToolPanel, &ToolPanelDock::ToolSelected, m_ToolPropertiesPanel, &ToolPropertiesPanelDock::OnToolSelected);
+	connect(m_ToolPanel, &ToolPanelDock::ToolSelected, m_ToolPropertiesPanel, &ToolPropertiesPanelDock::OnToolSelected);
+	connect(m_ToolPropertiesPanel, &ToolPropertiesPanelDock::CharacterSelected, this, &MainWindow::OnSelectedChar);
+	connect(m_ToolPropertiesPanel, &ToolPropertiesPanelDock::ApplyToAll, this, &MainWindow::OnApplyToAll);
+	connect(m_ToolPropertiesPanel, &ToolPropertiesPanelDock::AttributeSelected, this, &MainWindow::OnAddRemoveAttributeToSet);
+	connect(m_ToolPropertiesPanel, &ToolPropertiesPanelDock::ColorSelected, [this](const QColor& color)
+		{
+			m_ToolPanel->SelectColor(color);
+		});
+	connect(m_ToolPropertiesPanel, &ToolPropertiesPanelDock::TransparencySelected, this, &MainWindow::OnTransparencySelected);
 
-	m_ToolPanel->ActivateTool(ETool::Select);
+	QTimer::singleShot(1, [this]() {m_ToolPanel->ActivateTool(ETool::Select); });
+
+	// Status bar
+	m_StatusLabel = new QLabel("Ready");
+	statusBar()->addWidget(m_StatusLabel);
+	
+
 	SetupTheme();
+
 }
 
 void MainWindow::SetupMenuBar()
 {
-	QMenu* fileMenu = menuBar()->addMenu("&File");
+	QMenu* fileMenu = m_TitleBar->MenuBar->addMenu("&File");
 
 	QAction* newAction = new QAction("&New", this);
 	newAction->setShortcut(QKeySequence::New);
@@ -158,9 +153,9 @@ void MainWindow::SetupMenuBar()
 	fileMenu->addSeparator();
 	fileMenu->addAction(exitAction);
 
-	QMenu* windowMenu = menuBar()->addMenu("&Window");
+	QMenu* windowMenu = m_TitleBar->MenuBar->addMenu("&Window");
 	windowMenu->addAction(m_ToolPanel->toggleViewAction());
-	//windowMenu->addAction(m_Ui->PropertiesWidget->toggleViewAction());
+	windowMenu->addAction(m_ToolPropertiesPanel->toggleViewAction());
 
 }
 
@@ -189,12 +184,12 @@ void MainWindow::CreateCanvas(int32_t width, int32_t height)
 	m_Height = height;
 	qreal cellSize = 40;
 
-	m_CanvasOriginX = m_CanvasOriginX - (width * cellSize / 4);
-	m_CanvasOriginY = m_CanvasOriginY - (height * cellSize / 2);
+	int32_t canvasOriginX = (m_Scene->sceneRect().width() - (width * cellSize))/2;
+	int32_t canvasOriginY = (m_Scene->sceneRect().height() - (height * cellSize))/2;
 
-	QGraphicsRectItem* canvasBase = new QGraphicsRectItem(0, 0, width * cellSize * 0.5f, height * cellSize);
+	QGraphicsRectItem* canvasBase = new QGraphicsRectItem(0, 0, width * cellSize, height * cellSize * 2.f);
 	canvasBase->setZValue(0);
-	canvasBase->setPos(m_CanvasOriginX, m_CanvasOriginY);
+	canvasBase->setPos(canvasOriginX, canvasOriginY);
 	m_Scene->addItem(canvasBase);
 
 	m_Cells.resize(height);
@@ -212,6 +207,18 @@ void MainWindow::CreateCanvas(int32_t width, int32_t height)
 			cell->UpdateCell(data);
 		}
 	}
+	CellHightlight* cellHighlight = new CellHightlight(cellSize, cellSize * 2.f, canvasBase);
+	cellHighlight->setZValue(2);
+	connect(m_View, &CanvasView::HoveredCellChanged, [this, cellSize, cellHighlight](int32_t x, int32_t y)
+		{
+			cellHighlight->Show();
+			cellHighlight->setPos(x * cellSize, y * cellSize * 2.f);
+		});
+	connect(m_View, &CanvasView::HoveredCellGone, [this, cellSize, cellHighlight]()
+		{
+			cellHighlight->Hide();
+		});
+
 
 	m_StatusLabel->setText(QString("Canvas: %1x%2").arg(width).arg(height));
 }
@@ -220,13 +227,12 @@ void MainWindow::OnCanvasClicked(int32_t x, int32_t y, bool shiftPressed)
 {
 	if (x < 0 || x >= m_Width || y < 0 || y >= m_Height) return;
 
-	m_bIsDrawing = true;
 	ApplyCurrentTool(x, y, shiftPressed);
 }
 
 void MainWindow::OnCanvasDragged(int32_t x, int32_t y, bool shiftPressed)
 {
-	if (!m_bIsDrawing || x < 0 || x >= m_Width || y < 0 || y >= m_Height) return;
+	if (x < 0 || x >= m_Width || y < 0 || y >= m_Height) return;
 	ApplyCurrentTool(x, y, shiftPressed);
 }
 
@@ -236,7 +242,7 @@ void MainWindow::ApplyCurrentTool(int32_t x, int32_t y, bool shiftPressed)
 
 	switch (m_CurrentTool) {
 	case ETool::Brush:
-		if (shiftPressed)
+		if (!shiftPressed)
 		{
 			data.Character = m_CurrentChar;
 		}
@@ -246,9 +252,7 @@ void MainWindow::ApplyCurrentTool(int32_t x, int32_t y, bool shiftPressed)
 		}
 		break;
 	case ETool::Select:
-		ShowCellProperties(x, y);
-		m_SelectedX = x;
-		m_SelectedY = y;
+
 		return;
 
 	case ETool::Paint:
@@ -263,31 +267,40 @@ void MainWindow::ApplyCurrentTool(int32_t x, int32_t y, bool shiftPressed)
 		break;
 
 	case ETool::Attribute:
-		switch (m_CurrentAttribute) {
-		case Attribute::Bold:
+
+		data.Transparent = m_bCurrentTransparency;
+
+		if (m_CurrentAttributeSet & static_cast<uint8_t>(EAttribute::Bold))
+		{
 			data.Bold = !shiftPressed;
-			break;
-		case Attribute::Dim:
+		}
+		if (m_CurrentAttributeSet & static_cast<uint8_t>(EAttribute::Dim))
+		{
 			data.Dim = !shiftPressed;
-			break;
-		case Attribute::Italic:
+		}
+		if (m_CurrentAttributeSet & static_cast<uint8_t>(EAttribute::Italic))
+		{
 			data.Italic = !shiftPressed;
-			break;
-		case Attribute::Underline:
+		}
+		if (m_CurrentAttributeSet & static_cast<uint8_t>(EAttribute::Underline))
+		{
 			data.Underline = !shiftPressed;
-			break;
-		case Attribute::Blink:
+		}
+		if (m_CurrentAttributeSet & static_cast<uint8_t>(EAttribute::Blink))
+		{
 			data.Blink = !shiftPressed;
-			break;
-		case Attribute::Inverse:
+		}
+		if (m_CurrentAttributeSet & static_cast<uint8_t>(EAttribute::Inverse))
+		{
 			data.Inverse = !shiftPressed;
-			break;
-		case Attribute::DefaultFg:
+		}
+		if (m_CurrentAttributeSet & static_cast<uint8_t>(EAttribute::DefaultFg))
+		{
 			data.DefaultFg = !shiftPressed;
-			break;
-		case Attribute::DefaultBg:
+		}
+		if (m_CurrentAttributeSet & static_cast<uint8_t>(EAttribute::DefaultBg))
+		{
 			data.DefaultBg = !shiftPressed;
-			break;
 		}
 		break;
 	}
@@ -296,31 +309,36 @@ void MainWindow::ApplyCurrentTool(int32_t x, int32_t y, bool shiftPressed)
 	m_bIsModified = true;
 }
 
-void MainWindow::ShowCellProperties(int32_t x, int32_t y)
-{
-	CellData data = m_Cells[y][x]->GetData();
-	QString info = QString("Cell [%1, %2]\n").arg(x).arg(y);
-	info += QString("Char: '%1'\n").arg(data.Character);
-	info += QString("FG: RGB(%1,%2,%3)\n").arg(data.FgColor.red())
-		.arg(data.FgColor.green())
-		.arg(data.FgColor.blue());
-	info += QString("BG: RGB(%1,%2,%3)\n").arg(data.BgColor.red())
-		.arg(data.BgColor.green())
-		.arg(data.BgColor.blue());
-	info += "Attributes:\n";
-	if (data.Bold) info += "  • Bold\n";
-	if (data.Dim) info += "  • Dim\n";
-	if (data.Italic) info += "  • Italic\n";
-	if (data.Underline) info += "  • Underline\n";
-	if (data.Blink) info += "  • Blink\n";
-	if (data.Inverse) info += "  • Inverse\n";
-	if (data.DefaultFg) info += "  • DefaultFg\n";
-	if (data.DefaultBg) info += "  • DefaultBg\n";
 
-	m_SelectedCellInfo->setText(info);
+
+void MainWindow::paintEvent(QPaintEvent* event)
+{
+	QMainWindow::paintEvent(event);
+
+	QPainter painter(this);
+	painter.setRenderHint(QPainter::Antialiasing, true);
+
+	QColor backgroundColor = QColor("#4b4b4b");
+	QColor borderColor = QColor("#333333");
+	int32_t borderWidth = 1;
+	int32_t radius = 5;
+	
+	QRectF rect = this->rect();
+	rect.adjust(borderWidth / 2.0, borderWidth / 2.0,
+		-borderWidth / 2.0, -borderWidth / 2.0);
+
+	QPainterPath path;
+	path.addRoundedRect(rect, radius, radius);
+
+	painter.fillPath(path, backgroundColor);
+
+	QPen pen(borderColor, borderWidth);
+	painter.setPen(pen);
+	painter.drawPath(path);
 }
 
-void MainWindow::SelectTool(ETool tool)
+
+void MainWindow::OnToolSelected(ETool tool)
 {
 	m_CurrentTool = tool;
 	QString toolName;
@@ -334,55 +352,58 @@ void MainWindow::SelectTool(ETool tool)
 	m_StatusLabel->setText("Current tool: " + toolName);
 }
 
-void MainWindow::SelectCharacter(const QString& ch)
+void MainWindow::OnSelectedChar(QChar ch)
 {
-	if (!ch.isEmpty())
-	{
-		m_CurrentChar = ch[0];
-	}
+	m_CurrentChar = ch;
 }
 
-void MainWindow::SelectFgColor()
+void MainWindow::OnApplyToAll(QChar ch, bool bInvert)
 {
-	QColor color = QColorDialog::getColor(m_CurrentFgColor, this, "Select Foreground Color");
-	if (color.isValid())
+	QChar savedChar = m_CurrentChar;
+	m_CurrentChar = ch;
+	for (int32_t x = 0; x < m_Width; ++x)
 	{
-		m_CurrentFgColor = color;
-		m_FgColorBtn->setStyleSheet(QString("background-color: %1; color: %2;")
-			.arg(color.name())
-			.arg(color.lightness() > 128 ? "black" : "white"));
+		for (int32_t y = 0; y < m_Height; ++y)
+		{
+			ApplyCurrentTool(x, y, bInvert);
+		}
 	}
-}
-
-void MainWindow::SelectBgColor()
-{
-	QColor color = QColorDialog::getColor(m_CurrentBgColor, this, "Select Background Color");
-	if (color.isValid())
-	{
-		m_CurrentBgColor = color;
-		m_BgColorBtn->setStyleSheet(QString("background-color: %1; color: %2;")
-			.arg(color.name())
-			.arg(color.lightness() > 128 ? "black" : "white"));
-	}
+	m_CurrentChar = savedChar;
 }
 
 
-void MainWindow::SelectAttribute(Attribute attr)
+
+
+void MainWindow::OnAddRemoveAttributeToSet(EAttribute attr, bool bSelected)
 {
-	m_CurrentAttribute = attr;
 	QString attrName;
 	switch (attr)
 	{
-	case Attribute::Bold: attrName = "Bold"; break;
-	case Attribute::Dim: attrName = "Dim"; break;
-	case Attribute::Italic: attrName = "Italic"; break;
-	case Attribute::Underline: attrName = "Underline"; break;
-	case Attribute::Blink: attrName = "Blink"; break;
-	case Attribute::Inverse: attrName = "Inverse"; break;
-	case Attribute::DefaultFg: attrName = "DefaultFg"; break;
-	case Attribute::DefaultBg: attrName = "DefaultBg"; break;
+	case EAttribute::Bold: attrName = "Bold"; break;
+	case EAttribute::Dim: attrName = "Dim"; break;
+	case EAttribute::Italic: attrName = "Italic"; break;
+	case EAttribute::Underline: attrName = "Underline"; break;
+	case EAttribute::Blink: attrName = "Blink"; break;
+	case EAttribute::Inverse: attrName = "Inverse"; break;
+	case EAttribute::DefaultFg: attrName = "DefaultFg"; break;
+	case EAttribute::DefaultBg: attrName = "DefaultBg"; break;
 	}
-	m_StatusLabel->setText("Attribute: " + attrName + " (Hold Shift to remove)");
+
+	if (bSelected)
+	{
+		m_CurrentAttributeSet = m_CurrentAttributeSet | static_cast<uint8_t>(attr);
+		m_StatusLabel->setText("Attribute added to set: " + attrName);
+	}
+	else
+	{
+		m_CurrentAttributeSet = m_CurrentAttributeSet & ~static_cast<uint8_t>(attr);
+		m_StatusLabel->setText("Attribute removed from set: " + attrName);
+	}
+}
+
+void MainWindow::OnTransparencySelected(bool bSelected)
+{
+	m_bCurrentTransparency = bSelected;
 }
 
 void MainWindow::SaveFile()
@@ -462,6 +483,68 @@ bool MainWindow::SaveToFile(const QString& filename)
 void MainWindow::SetupTheme()
 {
 	m_Scene->setBackgroundBrush(QColor(45, 45, 45));
+	setStyleSheet(R"(
+    QMainWindow::separator {
+        width: 1px;
+        background: #222;
+    }
+    QMainWindow::dockwidget {
+        margin: 0;
+        padding: 0;
+    }
+	)");
+	statusBar()->setStyleSheet("QStatusBar {background: transparent;}");
+	statusBar()->findChild<QSizeGrip*>()->setStyleSheet("background: transparent; border:none;");
+	centralWidget()->setStyleSheet("#MainBackground {background: transparent;}");
+
+	m_View->setStyleSheet(R"(
+	QScrollBar:vertical {
+		background: transparent;
+		width: 16px;
+		margin: 0px;
+		border-radius: 0px;
+		border: 2px solid #474747;
+	}
+	QScrollBar::handle:vertical {
+        background: #636363;
+        min-height: 20px;
+        border-radius: 4px;
+    }
+    QScrollBar::handle:vertical:hover {
+        background: #656565;
+    }
+    QScrollBar::add-line:vertical,
+    QScrollBar::sub-line:vertical {
+        height: 0px; /* hide arrow buttons */
+    }
+    QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
+        background: #474747;  /* area behind handle (track) */
+    }
+
+    QScrollBar:horizontal {
+        background: transparent;
+        height: 16px;
+        margin: 0px;
+        border-radius: 0px;
+		border: 2px solid #474747;
+    }
+    QScrollBar::handle:horizontal {
+        background: #636363;
+        min-width: 20px;
+        border-radius: 4px;
+    }
+    QScrollBar::handle:horizontal:hover {
+        background: #656565;
+    }
+    QScrollBar::add-line:horizontal,
+    QScrollBar::sub-line:horizontal {
+        width: 0px; /* hide arrow buttons */
+    }
+	QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {
+        background: #474747;  /* area behind handle (track) */
+    }
+	)");
+
 }
 
 bool MainWindow::LoadFromFile(const QString& filename)

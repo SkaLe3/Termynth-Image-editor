@@ -12,6 +12,11 @@ ColorSwatch::ColorSwatch(QWidget* parent /*= nullptr*/)
 
 
 
+void ColorSwatch::SetColor(const QColor& color)
+{
+	UpdateColor(color);
+}
+
 void ColorSwatch::paintEvent(QPaintEvent*)
 {
 	QPainter p(this);
@@ -39,6 +44,13 @@ void ColorSwatch::mousePressEvent(QMouseEvent* event)
 	}
 }
 
+void ColorSwatch::UpdateColor(const QColor& color)
+{
+	m_Color = color;
+	emit ColorChanged(m_Color);
+	update();
+}
+
 void ColorSwatch::ChooseColor()
 {
 	QColorDialog dialog(this);
@@ -52,9 +64,7 @@ void ColorSwatch::ChooseColor()
 		QColor selectedColor = dialog.selectedColor();
 		if (selectedColor.isValid())
 		{
-			m_Color = selectedColor;
-			emit ColorChanged(m_Color);
-			update();
+			UpdateColor(selectedColor);
 		}
 	}
 }

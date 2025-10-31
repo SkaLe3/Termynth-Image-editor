@@ -20,6 +20,7 @@ public:
 	explicit ToolPanelDock(QWidget* parent = nullptr);
 
 	QColor GetActiveColor() const;
+	void SelectColor(const QColor& color);
 	void ActivateTool(ETool tool);
 
 signals:

@@ -3,17 +3,35 @@
 #include <QPainter>
 
 CellItem::CellItem(int32_t x, int32_t y, qreal size, QGraphicsItem* parent)
-	: QGraphicsRectItem(x* size * 0.5f, y* size, size * 0.5f, size, parent)
-	, m_GridX(x), m_GridY(y), m_Size(size)
+	: QGraphicsRectItem(x* size, y* size * 2.f, size, size * 2.f, parent)
+	, m_GridX(x), m_GridY(y), m_Size(size), m_bHovered(false)
 {
 	setAcceptHoverEvents(true);
 	setPen(QPen(Qt::gray, 1));
 	setParentItem(parent);
 }
 
+void CellItem::AddHighlight()
+{
+	m_bHovered = true;
+}
+
+void CellItem::RemoveHighlight()
+{
+	m_bHovered = false;
+}
+
 void CellItem::UpdateCell(const CellData& data)
 {
 	m_Data = data;
+	if (m_Data.Character == QChar(' '))
+	{
+		m_Data.DisplayText = "space";
+	}
+	else
+	{
+		m_Data.DisplayText = m_Data.Character;
+	}
 	update();
 }
 
@@ -22,79 +40,104 @@ void CellItem::paint(QPainter* painter, const QStyleOptionGraphicsItem* option, 
 	Q_UNUSED(option);
 	Q_UNUSED(widget);
 
-	painter->fillRect(rect(), m_Data.BgColor);
+	if (!m_Data.Transparent)
+	{
+		painter->fillRect(rect(), m_Data.BgColor);
+	}
 
-	painter->setPen(QPen(Qt::gray, 1));
+	QColor frameColor = Qt::gray;
+
+	painter->setPen(QPen(frameColor, 1));
 	painter->drawRect(rect());
 
-	QFont font("Courier New", 20);
+	if (m_Data.Transparent)
+		return;
+
+	QFont font("Consolas", 24);
 	font.setBold(m_Data.Bold);
 	font.setItalic(m_Data.Italic);
 	font.setUnderline(m_Data.Underline);
-	painter->setFont(font);
+
+	QFont font2("Consolas", 10);
+	font2.setBold(m_Data.Bold);
+	font2.setItalic(m_Data.Italic);
+	font2.setUnderline(m_Data.Underline);
+
+	if (m_Data.DisplayText == QString("space"))
+	{
+		painter->setFont(font2);
+	}
+	else
+	{
+		painter->setFont(font);
+	}
+
 	painter->setPen(m_Data.FgColor);
 
 	QRectF textRect = rect();
-	painter->drawText(textRect, Qt::AlignCenter, QString(m_Data.Character));
+	painter->drawText(textRect, Qt::AlignCenter, m_Data.DisplayText);
 
 	qreal iconSize = 8;
 	qreal margin = 2;
 	int32_t attrCount = 0;
 
+	qreal attrStartLeft = rect().left() + margin;
+	qreal attrStartTop1 = rect().top() + margin;
+	qreal attrStartTop2 = rect().bottom() - margin - iconSize;
+	QRectF attrRect;
+
+	auto recalculate_rect = [&attrRect, attrStartTop1, attrStartTop2, &attrCount, iconSize, attrStartLeft]()
+		{
+			qreal attrStartTop = attrCount >= 4 ? attrStartTop2 : attrStartTop1;
+			attrRect = QRectF(attrStartLeft + (attrCount % 4) * (iconSize + 1), attrStartTop, iconSize, iconSize);
+		};
+
 	if (m_Data.Bold)
 	{
-		painter->fillRect(QRectF(rect().right() - iconSize - margin,
-			rect().top() + margin + attrCount * (iconSize + 1),
-			iconSize, iconSize), Qt::red);
+		recalculate_rect();
+		painter->fillRect(attrRect, Qt::red);
 		attrCount++;
 	}
 	if (m_Data.Dim)
 	{
-		painter->fillRect(QRectF(rect().right() - iconSize - margin,
-			rect().top() + margin + attrCount * (iconSize + 1),
-			iconSize, iconSize), Qt::magenta);
+		recalculate_rect();
+		painter->fillRect(attrRect, Qt::magenta);
 		attrCount++;
 	}
 	if (m_Data.Italic)
 	{
-		painter->fillRect(QRectF(rect().right() - iconSize - margin,
-			rect().top() + margin + attrCount * (iconSize + 1),
-			iconSize, iconSize), Qt::blue);
+		recalculate_rect();
+		painter->fillRect(attrRect, Qt::blue);
 		attrCount++;
 	}
 	if (m_Data.Underline)
 	{
-		painter->fillRect(QRect(rect().right() - iconSize - margin,
-			rect().top() + margin + attrCount * (iconSize + 1),
-			iconSize, iconSize), Qt::green);
+		recalculate_rect();
+		painter->fillRect(attrRect, Qt::green);
 		attrCount++;
 	}
 	if (m_Data.Blink)
 	{
-		painter->fillRect(QRect(rect().right() - iconSize - margin,
-			rect().top() + margin + attrCount * (iconSize + 1),
-			iconSize, iconSize), Qt::cyan);
+		recalculate_rect();
+		painter->fillRect(attrRect, Qt::cyan);
 		attrCount++;
 	}
 	if (m_Data.Inverse)
 	{
-		painter->fillRect(QRect(rect().right() - iconSize - margin,
-			rect().top() + margin + attrCount * (iconSize + 1),
-			iconSize, iconSize), Qt::darkRed);
+		recalculate_rect();
+		painter->fillRect(attrRect, Qt::darkRed);
 		attrCount++;
 	}
 	if (m_Data.DefaultFg)
 	{
-		painter->fillRect(QRect(rect().right() - iconSize - margin,
-			rect().top() + margin + attrCount * (iconSize + 1),
-			iconSize, iconSize), Qt::darkGreen);
+		recalculate_rect();
+		painter->fillRect(attrRect, Qt::darkGreen);
 		attrCount++;
 	}
 	if (m_Data.DefaultBg)
 	{
-		painter->fillRect(QRect(rect().right() - iconSize - margin,
-			rect().top() + margin + attrCount * (iconSize + 1),
-			iconSize, iconSize), Qt::darkCyan);
+		recalculate_rect();
+		painter->fillRect(attrRect, Qt::darkCyan);
 		attrCount++;
 	}
 }
@@ -141,5 +184,38 @@ void CellData::Deserialize(QDataStream& in)
 	Inverse = attributes & (1 << 5);
 	DefaultFg = attributes & (1 << 6);
 	DefaultBg = attributes & (1 << 7);
+
+}
+
+CellHightlight::CellHightlight(qreal sizeX, qreal sizeY, QGraphicsItem* parent /*= nullptr*/)
+	: QGraphicsRectItem(0.f,0.f, sizeX, sizeY, parent), m_bVisible(false)
+{
+
+}
+
+void CellHightlight::Show()
+{
+	m_bVisible = true;
+}
+
+void CellHightlight::Hide()
+{
+	m_bVisible = false;
+}
+
+void CellHightlight::paint(QPainter* painter, const QStyleOptionGraphicsItem* option, QWidget* widget)
+{
+	Q_UNUSED(option);
+	Q_UNUSED(widget);
+
+	if (!m_bVisible) return;
+
+	QColor frameColor = Qt::gray;
+	frameColor = QColor("#FFFFFF");
+
+
+	painter->setPen(QPen(frameColor, 2));
+	painter->drawRect(rect());
+
 
 }
