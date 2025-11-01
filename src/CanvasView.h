@@ -12,6 +12,7 @@ class CanvasView : public QGraphicsView
 	Q_OBJECT
 public:
 	explicit CanvasView(MainWindow* parent = nullptr);
+	void Clear();
 
 signals:
 	void HoveredCellChanged(int32_t x, int32_t y);

@@ -1,5 +1,6 @@
 #pragma once
 #include <QGraphicsRectItem>
+#include "SaveDialog.h"
 
 struct CellData
 {
@@ -17,8 +18,8 @@ struct CellData
 	bool DefaultBg = true;
 	bool Transparent = false;
 
-	void Serialize(QDataStream& out);
-	void Deserialize(QDataStream& in);
+	void Serialize(QDataStream& out, EImageFormat format);
+	void Deserialize(QDataStream& in, EImageFormat format);
 };
 
 class CellHightlight : public QGraphicsRectItem

@@ -18,16 +18,16 @@ TitleBarWidget::TitleBarWidget(QWidget* parent /*= nullptr*/)
 	layout->setSpacing(6);
 
 	// Menu Bar
-	MenuBar = new QMenuBar(this);
-	MenuBar->setObjectName("TitleBarMenu");
-	MenuBar->setNativeMenuBar(false);
+	m_MenuBar = new QMenuBar(this);
+	m_MenuBar->setObjectName("TitleBarMenu");
+	m_MenuBar->setNativeMenuBar(false);
 
 	QWidget* menuContainer = new QWidget(this);
 	QHBoxLayout* menuLayout = new QHBoxLayout(menuContainer);
 	menuLayout->setContentsMargins(0, 0, 0, 0);
-	menuLayout->addWidget(MenuBar, 0, Qt::AlignLeft);
+	menuLayout->addWidget(m_MenuBar, 0, Qt::AlignLeft);
 
-	MenuBar->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Preferred);
+	m_MenuBar->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Preferred);
 	layout->addWidget(menuContainer, 1, Qt::AlignVCenter);
 
 	layout->addStretch();
@@ -69,8 +69,15 @@ TitleBarWidget::TitleBarWidget(QWidget* parent /*= nullptr*/)
 	connect(closeButton, &QPushButton::clicked, this, &TitleBarWidget::CloseRequested);
 
 	StyleTitleBar();
+
+	SetupMenuBar(m_MenuBar);
 }
 
+
+void TitleBarWidget::AddWindowMenuAction(QAction* action)
+{
+	m_WindowMenu->addAction(action);
+}
 
 void TitleBarWidget::mousePressEvent(QMouseEvent* event)
 {
@@ -96,6 +103,45 @@ void TitleBarWidget::mouseReleaseEvent(QMouseEvent*)
 	m_IsDragging = false;
 }
 
+
+void TitleBarWidget::SetupMenuBar(QMenuBar* menuBar)
+{
+	QMenu* fileMenu = menuBar->addMenu("&File");
+
+	QAction* newAction = new QAction("&New", this);
+	newAction->setShortcut(QKeySequence::New);
+	connect(newAction, &QAction::triggered, [this]() {emit NewFile(); });
+
+	QAction* openAction = new QAction("&Open", this);
+	openAction->setShortcut(QKeySequence::Open);
+	connect(openAction, &QAction::triggered, [this]() {emit OpenFile(); });
+
+	QAction* saveAction = new QAction("&Save", this);
+	saveAction->setShortcut(QKeySequence::Save);
+	connect(saveAction, &QAction::triggered, [this]() {emit SaveFile(); });
+
+	QAction* saveAsAction = new QAction("Save &As", this);
+	saveAsAction->setShortcut(QKeySequence::SaveAs);
+	connect(saveAsAction, &QAction::triggered, [this]() {emit SaveFileAs(); });
+
+	QAction* exitAction = new QAction("&Exit", this);
+	exitAction->setShortcut(QKeySequence::Quit);
+	connect(exitAction, &QAction::triggered, [this]() {emit Close(); });
+
+	fileMenu->addAction(newAction);
+	fileMenu->addAction(openAction);
+	fileMenu->addSeparator();
+	fileMenu->addAction(saveAction);
+	fileMenu->addAction(saveAsAction);
+	fileMenu->addSeparator();
+	fileMenu->addAction(exitAction);
+
+	m_WindowMenu = menuBar->addMenu("&Window");
+
+
+	StyleMenu(fileMenu);
+	StyleMenu(m_WindowMenu);
+}
 
 void TitleBarWidget::StyleTitleBar()
 {
@@ -130,7 +176,7 @@ void TitleBarWidget::StyleTitleBar()
 		}
     )");
 
-	MenuBar->setStyleSheet(R"(
+	m_MenuBar->setStyleSheet(R"(
 		QMenuBar::item {
 			background-color: transparent;
 			padding: 1px 8px;
@@ -146,6 +192,30 @@ void TitleBarWidget::StyleTitleBar()
             background: #404040;
         }
 )");
+}
+
+void TitleBarWidget::StyleMenu(QMenu* menu)
+{
+	menu->setStyleSheet(R"(
+	QMenu {
+		background-color: #4b4b4b;
+		border: 1px solid #333333;
+		padding: 2px;
+	}
+	QMenu::item {
+		padding: 4px 20px;
+		background-color: transparent;
+		color white;
+	}
+	QMenu::item::selected {
+		background-color: #636363;
+	}
+	QMenu::separator {
+		height: 1px;
+		background: #333333;
+		margin: 4px 0;
+	}
+	)");
 }
 
 QPixmap TitleBarWidget::CreateMinimizeIconPixmap()

@@ -3,9 +3,10 @@
 #include <QPainter>
 
 CellItem::CellItem(int32_t x, int32_t y, qreal size, QGraphicsItem* parent)
-	: QGraphicsRectItem(x* size, y* size * 2.f, size, size * 2.f, parent)
+	: QGraphicsRectItem(0, 0, size, size * 2, parent)
 	, m_GridX(x), m_GridY(y), m_Size(size), m_bHovered(false)
 {
+	setPos(x * size, y * size * 2);
 	setAcceptHoverEvents(true);
 	setPen(QPen(Qt::gray, 1));
 	setParentItem(parent);
@@ -142,37 +143,46 @@ void CellItem::paint(QPainter* painter, const QStyleOptionGraphicsItem* option, 
 	}
 }
 
-void CellData::Serialize(QDataStream& out)
+void CellData::Serialize(QDataStream& out, EImageFormat format)
 {
 	quint8 attributes = 0;
 	attributes = (Bold) | (Dim << 1) | (Italic << 2) | (Underline << 3) |
 		(Blink << 4) | (Inverse << 5) | (0 << 6) | (0 << 7);
 
-	bool outTransparent = true;
-	if (BgColor.alpha() < 128)
-		outTransparent = false;
+	bool outTransparent = Transparent;
 
 	out << static_cast<quint16>(Character.unicode());
 	out << quint8(outTransparent);
-	out << attributes;
-	out << static_cast<quint8>(FgColor.red()) << static_cast<quint8>(FgColor.green()) << static_cast<quint8>(FgColor.blue());
-	out << static_cast<quint8>(BgColor.red()) << static_cast<quint8>(BgColor.green()) << static_cast<quint8>(BgColor.blue());
+	if (format == EImageFormat::AttributesText || format == EImageFormat::AttributesColoredText)
+	{
+		out << attributes;
+	}
+	if (format == EImageFormat::ColoredText || format == EImageFormat::AttributesColoredText)
+	{
+		out << static_cast<quint8>(FgColor.red()) << static_cast<quint8>(FgColor.green()) << static_cast<quint8>(FgColor.blue());
+		out << static_cast<quint8>(BgColor.red()) << static_cast<quint8>(BgColor.green()) << static_cast<quint8>(BgColor.blue());
+	}
 }
 
-void CellData::Deserialize(QDataStream& in)
+void CellData::Deserialize(QDataStream& in, EImageFormat format)
 {
 	quint8 attributes = 0;
-	quint16 charCode = 0;
-	quint8 fgR, fgG, fgB;
-	quint8 bgR, bgG, bgB;
-	bool transparent;
+	quint16 charCode = 32;
+	quint8 fgR = 255, fgG = 255, fgB = 255;
+	quint8 bgR = 0, bgG = 0, bgB = 0;
+	bool transparent = false;
 
 	in >> charCode;
 	in >> transparent;
-	in >> attributes;
-	in >> fgR >> fgG >> fgB;
-	in >> bgR >> bgG >> bgB;
-
+	if (format == EImageFormat::AttributesText || format == EImageFormat::AttributesColoredText)
+	{
+		in >> attributes;
+	}
+	if (format == EImageFormat::ColoredText || format == EImageFormat::AttributesColoredText)
+	{
+		in >> fgR >> fgG >> fgB;
+		in >> bgR >> bgG >> bgB;
+	}
 	Character = QChar(static_cast<char16_t>(charCode));
 	FgColor = QColor(fgR, fgG, fgB, 255);
 	BgColor = QColor(bgR, bgG, bgB, 255);
@@ -188,7 +198,7 @@ void CellData::Deserialize(QDataStream& in)
 }
 
 CellHightlight::CellHightlight(qreal sizeX, qreal sizeY, QGraphicsItem* parent /*= nullptr*/)
-	: QGraphicsRectItem(0.f,0.f, sizeX, sizeY, parent), m_bVisible(false)
+	: QGraphicsRectItem(0.f, 0.f, sizeX, sizeY, parent), m_bVisible(false)
 {
 
 }

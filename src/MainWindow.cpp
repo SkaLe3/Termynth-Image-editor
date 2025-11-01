@@ -20,6 +20,8 @@
 #include <QButtonGroup>
 #include <QTimer>
 #include <QSizeGrip>
+#include <QFormLayout>
+#include <QCloseEvent>
 
 
 #include "CanvasView.h"
@@ -42,6 +44,7 @@ MainWindow::MainWindow(QWidget* parent)
 	, m_CurrentAttributeSet(0)
 	, m_bIsModified(false)
 	, m_bCurrentTransparency(false)
+	, m_CurrentImageFormat(EImageFormat::AttributesColoredText)
 {
 	SetupUI();
 	SetupMenuBar();
@@ -85,9 +88,7 @@ void MainWindow::SetupUI()
 		});
 	connect(m_TitleBar, &TitleBarWidget::CloseRequested, this, &MainWindow::close);
 
-	connect(m_View, &CanvasView::CanvasDragged, this, &MainWindow::OnCanvasDragged);
-	connect(m_View, &CanvasView::CanvasClicked, this, &MainWindow::OnCanvasClicked);
-	
+
 	// Tools	
 	m_ToolPanel = new ToolPanelDock(this);
 	addDockWidget(Qt::LeftDockWidgetArea, m_ToolPanel);
@@ -123,63 +124,136 @@ void MainWindow::SetupUI()
 
 void MainWindow::SetupMenuBar()
 {
-	QMenu* fileMenu = m_TitleBar->MenuBar->addMenu("&File");
+	connect(m_TitleBar, &TitleBarWidget::NewFile, this, &MainWindow::OnNewFile);
+	connect(m_TitleBar, &TitleBarWidget::OpenFile, this, &MainWindow::OnOpenFile);
+	connect(m_TitleBar, &TitleBarWidget::SaveFile, this, &MainWindow::OnSaveFile);
+	connect(m_TitleBar, &TitleBarWidget::SaveFileAs, this, &MainWindow::OnSaveFileAs);
+	connect(m_TitleBar, &TitleBarWidget::Close, this, &QWidget::close);
 
-	QAction* newAction = new QAction("&New", this);
-	newAction->setShortcut(QKeySequence::New);
-	connect(newAction, &QAction::triggered, this, &MainWindow::NewFile);
-
-	QAction* openAction = new QAction("&Open", this);
-	openAction->setShortcut(QKeySequence::Open);
-	connect(openAction, &QAction::triggered, this, &MainWindow::OpenFile);
-
-	QAction* saveAction = new QAction("&Save", this);
-	saveAction->setShortcut(QKeySequence::Save);
-	connect(saveAction, &QAction::triggered, this, &MainWindow::SaveFile);
-
-	QAction* saveAsAction = new QAction("Save &As", this);
-	saveAsAction->setShortcut(QKeySequence::SaveAs);
-	connect(saveAsAction, &QAction::triggered, this, &MainWindow::SaveFileAs);
-
-	QAction* exitAction = new QAction("&Exit", this);
-	exitAction->setShortcut(QKeySequence::Quit);
-	connect(exitAction, &QAction::triggered, this, &QWidget::close);
-
-	fileMenu->addAction(newAction);
-	fileMenu->addAction(openAction);
-	fileMenu->addSeparator();
-	fileMenu->addAction(saveAction);
-	fileMenu->addAction(saveAsAction);
-	fileMenu->addSeparator();
-	fileMenu->addAction(exitAction);
-
-	QMenu* windowMenu = m_TitleBar->MenuBar->addMenu("&Window");
-	windowMenu->addAction(m_ToolPanel->toggleViewAction());
-	windowMenu->addAction(m_ToolPropertiesPanel->toggleViewAction());
-
+	m_TitleBar->AddWindowMenuAction(m_ToolPanel->toggleViewAction());
+	m_TitleBar->AddWindowMenuAction(m_ToolPropertiesPanel->toggleViewAction());
 }
 
-void MainWindow::NewFile()
+void MainWindow::OnNewFile()
 {
-	bool okWidth, okHeight;
-	int width = QInputDialog::getInt(this, "New Canvas", "Width (1-400):",
-		32, 1, 400, 1, &okWidth);
-	if (!okWidth) return;
+	QDialog dialog(this);
+	dialog.setWindowTitle("New Canvas");
 
-	int height = QInputDialog::getInt(this, "New Canvas", "Height (1-100):",
-		16, 1, 100, 1, &okHeight);
-	if (!okHeight) return;
+	QLineEdit* widthEdit = new QLineEdit(&dialog);
+	widthEdit->setValidator(new QIntValidator(1, 400, widthEdit));
+	widthEdit->setText("32");
+	widthEdit->setFixedWidth(60);
 
-	CreateCanvas(width, height);
-	m_CurrentFilePath.clear();
-	m_bIsModified = false;
-	setWindowTitle("Console Texture Editor - Untitled");
+	QLineEdit* heightEdit = new QLineEdit(&dialog);
+	heightEdit->setValidator(new QIntValidator(1, 100, heightEdit));
+	heightEdit->setText("32");
+	heightEdit->setFixedWidth(60);
+
+	QFormLayout* formLayout = new QFormLayout;
+	formLayout->addRow("Width", widthEdit);
+	formLayout->addRow("Height", heightEdit);
+
+	QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+	QPushButton* createButton = buttons->button(QDialogButtonBox::Ok);
+	QPushButton* closeButton = buttons->button(QDialogButtonBox::Cancel);
+
+	createButton->setText("Create");
+	closeButton->setText("Close");
+
+	createButton->setObjectName("CreateButton");
+	closeButton->setObjectName("CloseButton");
+	createButton->setFixedSize(70, 28);
+	closeButton->setFixedSize(70, 28);
+
+	connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+	connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+
+	QVBoxLayout* mainLayout = new QVBoxLayout;
+	mainLayout->addLayout(formLayout);
+	mainLayout->addWidget(buttons);
+
+	dialog.setLayout(mainLayout);
+
+	dialog.setStyleSheet(R"(
+    /* Style labels (Width: / Height:) */
+    QFormLayout QLabel {
+        color: #9d9d9d;
+        font-weight: bold;
+        font-size: 14px;
+    }
+
+    /* Style line edits */
+    QLineEdit {
+        background-color: #333333;
+        color: #ffffff;
+        border: 1px solid #636363;
+        border-radius: 4px;
+        padding: 4px 14px;
+        selection-background-color: #444444;
+        selection-color: #ffffff;
+        font-size: 14px;
+    }
+
+	QPushButton {
+		color: #ffffff;
+		border-radius: 12px;
+		padding: 6px 12px;
+		font-size: 14px;
+		font-weight: bold;
+		border: 2px;
+	}
+
+    /* Style QDialogButtonBox buttons */
+    QPushButton#CreateButton {
+        background-color: #7604d6;
+		border: 2px solid #7604d6;
+    }
+
+    /* Hover state */
+     QPushButton#CreateButton:hover {
+        background-color: #6602c6;
+		border: 2px solid #6602c6;
+    }
+
+    /* Pressed state */
+     QPushButton#CreateButton:pressed {
+        background-color: #6002b8;
+		border: 2px solid #6002b8;
+    }
+
+	QPushButton#CloseButton	{
+		background-color: transparent;
+		border: 2px solid #dddddd;
+	}
+	QPushButton#CloseButton:hover {
+		background-color: #dddddd;
+		border: 2px solid #dddddd;
+		color: #4b4b4b;
+	}
+	QPushButton#CloseButton:pressed {
+		background-color: #ffffff;
+		border: 2px solid #ffffff;
+	}
+)");
+
+
+	if (dialog.exec() == QDialog::Accepted)
+	{
+		int32_t width = widthEdit->text().toInt();
+		int32_t height = heightEdit->text().toInt();
+		
+		CreateCanvas(width, height);
+		m_CurrentFilePath.clear();
+		m_bIsModified = true;
+		setWindowTitle("Termynth Image Editor - Untitled");
+	}
 }
 
 void MainWindow::CreateCanvas(int32_t width, int32_t height)
 {
 	m_Scene->clear();
 	m_Cells.clear();
+	m_View->Clear();
 	m_Width = width;
 	m_Height = height;
 	qreal cellSize = 40;
@@ -207,26 +281,32 @@ void MainWindow::CreateCanvas(int32_t width, int32_t height)
 			cell->UpdateCell(data);
 		}
 	}
-	CellHightlight* cellHighlight = new CellHightlight(cellSize, cellSize * 2.f, canvasBase);
-	cellHighlight->setZValue(2);
-	connect(m_View, &CanvasView::HoveredCellChanged, [this, cellSize, cellHighlight](int32_t x, int32_t y)
-		{
-			cellHighlight->Show();
-			cellHighlight->setPos(x * cellSize, y * cellSize * 2.f);
-		});
-	connect(m_View, &CanvasView::HoveredCellGone, [this, cellSize, cellHighlight]()
-		{
-			cellHighlight->Hide();
-		});
+	m_CellHightlight = new CellHightlight(cellSize, cellSize * 2.f, canvasBase);
+	m_CellHightlight->setZValue(2);
 
+	disconnect(m_View, nullptr, this, nullptr);
 
+	connect(m_View, &CanvasView::HoveredCellChanged, [this, cellSize ](int32_t x, int32_t y)
+		{
+			if (!m_CellHightlight) return;
+			m_CellHightlight->Show();
+			m_CellHightlight->setPos(x * cellSize, y * cellSize * 2.f);
+		});
+	connect(m_View, &CanvasView::HoveredCellGone, [this, cellSize]()
+		{
+			if (!m_CellHightlight) return;
+			m_CellHightlight->Hide();
+		});
+	disconnect(m_View, &CanvasView::CanvasDragged, this, &MainWindow::OnCanvasDragged);
+	disconnect(m_View, &CanvasView::CanvasClicked, this, &MainWindow::OnCanvasClicked);
+	connect(m_View, &CanvasView::CanvasDragged, this, &MainWindow::OnCanvasDragged);
+	connect(m_View, &CanvasView::CanvasClicked, this, &MainWindow::OnCanvasClicked);
 	m_StatusLabel->setText(QString("Canvas: %1x%2").arg(width).arg(height));
 }
 
 void MainWindow::OnCanvasClicked(int32_t x, int32_t y, bool shiftPressed)
 {
 	if (x < 0 || x >= m_Width || y < 0 || y >= m_Height) return;
-
 	ApplyCurrentTool(x, y, shiftPressed);
 }
 
@@ -338,6 +418,43 @@ void MainWindow::paintEvent(QPaintEvent* event)
 }
 
 
+void MainWindow::closeEvent(QCloseEvent* event)
+{
+	if (!m_bIsModified)
+	{
+		event->accept();
+		return;
+	}
+	QMessageBox msgBox(this);
+	msgBox.setWindowTitle("Confirm Exit");
+	msgBox.setText("Do you want to save changes to your current file before exiting?");
+	msgBox.setIcon(QMessageBox::Question);
+	QPushButton* saveButton = msgBox.addButton("Save", QMessageBox::AcceptRole);
+	QPushButton* dontSaveButton = msgBox.addButton("Don't Save", QMessageBox::DestructiveRole);
+	QPushButton* cancelButton = msgBox.addButton("Cancel", QMessageBox::RejectRole);
+
+	msgBox.exec();
+
+	if (msgBox.clickedButton() == saveButton)
+	{
+		OnSaveFile();
+		if (m_bIsModified)
+		{
+			event->ignore();
+			return;
+		}
+		event->accept();
+	}
+	else if (msgBox.clickedButton() == dontSaveButton) 
+	{
+		event->accept();
+	}
+	else if (msgBox.clickedButton() == cancelButton)
+	{
+		event->ignore();
+	}
+}
+
 void MainWindow::OnToolSelected(ETool tool)
 {
 	m_CurrentTool = tool;
@@ -406,33 +523,48 @@ void MainWindow::OnTransparencySelected(bool bSelected)
 	m_bCurrentTransparency = bSelected;
 }
 
-void MainWindow::SaveFile()
+
+void MainWindow::OnSaveFile()
 {
+	if (m_Cells.isEmpty())
+	{
+		return;
+	}
 	if (m_CurrentFilePath.isEmpty())
 	{
-		SaveFileAs();
+		OnSaveFileAs();
 	}
 	else
 	{
-		SaveToFile(m_CurrentFilePath);
+		SaveToFile(m_CurrentFilePath, m_CurrentImageFormat);
 	}
 }
 
-void MainWindow::SaveFileAs()
+void MainWindow::OnSaveFileAs()
 {
-	QString filename = QFileDialog::getSaveFileName(this, "Save Texture",
-		"", "Texture Files (*.thtx)");
-	if (!filename.isEmpty())
+	if (m_Cells.isEmpty())
 	{
-		if (SaveToFile(filename))
+		return;
+	}
+
+	SaveDialog dlg(this);
+	if (dlg.exec() == QDialog::Accepted)
+	{
+		QString filename = dlg.FilePath();
+		if (filename.isEmpty()) return;
+		EImageFormat format = dlg.SelectedFormat();
+		m_CurrentImageFormat = format;
+		if (SaveToFile(filename, format))
 		{
 			m_CurrentFilePath = filename;
 			setWindowTitle("Termynth Image Editor - " + QFileInfo(filename).fileName());
 		}
+
 	}
+
 }
 
-void MainWindow::OpenFile()
+void MainWindow::OnOpenFile()
 {
 	QString filename = QFileDialog::getOpenFileName(this, "Open Texture",
 		"", "Texture Files (*.thtx)");
@@ -446,7 +578,7 @@ void MainWindow::OpenFile()
 	}
 }
 
-bool MainWindow::SaveToFile(const QString& filename)
+bool MainWindow::SaveToFile(const QString& filename, EImageFormat format)
 {
 	QFile file(filename);
 	if (!file.open(QIODevice::WriteOnly)) {
@@ -454,6 +586,23 @@ bool MainWindow::SaveToFile(const QString& filename)
 		return false;
 	}
 
+	quint8 channelNum = 10;
+	switch (format)
+	{
+	case EImageFormat::DefaultText:
+		channelNum = 3;
+		break;
+	case EImageFormat::AttributesText:
+		channelNum = 4;
+		break;
+	case EImageFormat::ColoredText:
+		channelNum = 9;
+		break;
+	case EImageFormat::AttributesColoredText:
+	default:
+		channelNum = 10;
+		break;
+	}
 
 
 	quint32 magic = (static_cast<quint32>('T') << 24) |
@@ -465,12 +614,12 @@ bool MainWindow::SaveToFile(const QString& filename)
 	out.setByteOrder(QDataStream::LittleEndian);
 	out << magic; // Magic number
 	out << quint32(m_Width) << quint32(m_Height);
-	out << quint8(10); // channel
+	out << channelNum; // channel
 
 	for (int y = 0; y < m_Height; ++y) {
 		for (int x = 0; x < m_Width; ++x) {
 			CellData data = m_Cells[y][x]->GetData();
-			data.Serialize(out);
+			data.Serialize(out, format);
 
 		}
 	}
@@ -573,12 +722,29 @@ bool MainWindow::LoadFromFile(const QString& filename)
 	in >> width >> height;
 	quint8 channel;
 	in >> channel;
-	CreateCanvas(width, height);
 
+	EImageFormat imageFormat = EImageFormat::AttributesColoredText;
+	switch (channel)
+	{
+	case 3:
+		imageFormat = EImageFormat::DefaultText;
+		break;
+	case 4:
+		imageFormat = EImageFormat::AttributesText;
+		break;
+	case 9:
+		imageFormat = EImageFormat::ColoredText;
+		break;
+	case 10:
+		imageFormat = EImageFormat::AttributesColoredText;
+		break;
+	}
+
+	CreateCanvas(width, height);
 	for (int y = 0; y < m_Height; ++y) {
 		for (int x = 0; x < m_Width; ++x) {
 			CellData data;
-			data.Deserialize(in);
+			data.Deserialize(in, imageFormat);
 			m_Cells[y][x]->UpdateCell(data);
 		}
 	}

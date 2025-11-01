@@ -13,6 +13,7 @@
 
 #include "Tool.h"
 #include "Attribute.h"
+#include "SaveDialog.h"
 
 #include <cstdint>
 
@@ -22,6 +23,10 @@ class ColorSwatch;
 class ToolPanelDock;
 class ToolPropertiesPanelDock;
 class TitleBarWidget;
+class CellHightlight;
+
+
+
 
 class MainWindow : public QMainWindow
 {
@@ -31,10 +36,10 @@ public:
 	~MainWindow();
 
 public slots:
-	void NewFile();
-	void OpenFile();
-	void SaveFile();
-	void SaveFileAs();
+	void OnNewFile();
+	void OnOpenFile();
+	void OnSaveFile();
+	void OnSaveFileAs();
 	void OnCanvasClicked(int32_t x, int32_t y, bool shiftPressed);
 	void OnCanvasDragged(int32_t x, int32_t y, bool shiftPressed);
 	void OnToolSelected(ETool tool);
@@ -45,6 +50,7 @@ public slots:
 
 protected:
 	void paintEvent(QPaintEvent* event) override;
+	void closeEvent(QCloseEvent* event) override;
 
 private:
 	void SetupUI();
@@ -52,7 +58,7 @@ private:
 	void CreateCanvas(int32_t width, int32_t height);
 	void ApplyCurrentTool(int32_t x, int32_t y, bool shiftPressed);
 	bool LoadFromFile(const QString& filename);
-	bool SaveToFile(const QString& filename);
+	bool SaveToFile(const QString& filename, EImageFormat format);
 
 	void SetupTheme();
 
@@ -69,6 +75,7 @@ private:
 	int32_t m_Width;
 	int32_t m_Height;
 	QVector<QVector<CellItem*>> m_Cells;
+	CellHightlight* m_CellHightlight;
 
 	// Current tool state
 	ETool m_CurrentTool;
@@ -78,6 +85,7 @@ private:
 
 	// File handling
 	QString m_CurrentFilePath;
+	EImageFormat m_CurrentImageFormat;
 	bool m_bIsModified;
 
 };

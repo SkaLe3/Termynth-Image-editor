@@ -19,8 +19,16 @@ CanvasView::CanvasView(MainWindow* parent /*= nullptr*/)
 	setResizeAnchor(AnchorUnderMouse);
 	setFrameStyle(QFrame::NoFrame);
 	UpdateZoom();
+
 }
 
+
+void CanvasView::Clear()
+{
+	m_HoveredCell = nullptr;
+	horizontalScrollBar()->setValue(horizontalScrollBar()->maximum() / 2);
+	verticalScrollBar()->setValue(verticalScrollBar()->maximum() / 2);
+}
 
 void CanvasView::wheelEvent(QWheelEvent* event)
 {
@@ -156,19 +164,23 @@ void CanvasView::HandleMouseEvent(QMouseEvent* event, bool bDrag)
 void CanvasView::HandleMouseHoverCell(QMouseEvent* event)
 {
 	QPointF scenePos = mapToScene(event->pos());
-	QGraphicsItem* item = scene()->itemAt(scenePos, transform());
-	if (CellItem* cell = dynamic_cast<CellItem*>(item))
+	QList<QGraphicsItem*> itemsAtPos = scene()->items(scenePos, Qt::IntersectsItemShape, Qt::DescendingOrder, transform());
+	for (QGraphicsItem* item : itemsAtPos)
 	{
-		if (cell != m_HoveredCell)
+		if (CellItem* cell = dynamic_cast<CellItem*>(item))
 		{
-			m_HoveredCell = cell;
-			emit HoveredCellChanged(cell->GetGridX(), cell->GetGridY());
+			if (cell != m_HoveredCell)
+			{
+				m_HoveredCell = cell;
+				emit HoveredCellChanged(cell->GetGridX(), cell->GetGridY());
+			}
+			break;
 		}
-	}
-	else
-	{
-		m_HoveredCell = nullptr;
-		emit HoveredCellGone();
+		else
+		{
+			m_HoveredCell = nullptr;
+			emit HoveredCellGone();
+		}
 	}
 }
 

@@ -14,10 +14,19 @@ class TitleBarWidget : public QWidget
 public:
 	explicit TitleBarWidget(QWidget* parent = nullptr);
 
+public:
+	void AddWindowMenuAction(QAction* action);
+
 signals:
 	void MinimizeRequested();
 	void MaximizeRequested();
 	void CloseRequested();
+
+	void NewFile();
+	void OpenFile();
+	void SaveFile();
+	void SaveFileAs();
+	void Close();
 
 protected:
 	void mousePressEvent(QMouseEvent* event) override;
@@ -25,17 +34,18 @@ protected:
 	void mouseReleaseEvent(QMouseEvent*) override;
 
 private:
+	void SetupMenuBar(QMenuBar* menuBar);
 	void StyleTitleBar();
+	void StyleMenu(QMenu* menu);
 
 	QPixmap CreateMinimizeIconPixmap();
 	QPixmap CreateMaximizeIconPixmap();
 	QPixmap CreateCloseIconPixmap();
 	void CreateIconPixmap(QPixmap& iconPixmap, const QColor& color);
-	
-public:
-	QMenuBar* MenuBar;
 
 private:
+	QMenuBar* m_MenuBar;
+	QMenu* m_WindowMenu;
 	QPoint m_DragPosition;
 	bool m_IsDragging = false;
 };
